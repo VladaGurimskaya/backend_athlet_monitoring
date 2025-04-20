@@ -1,0 +1,20 @@
+{
+  "$schema": "./node_modules/@openapitools/openapi-generator-cli/config.schema.json",
+  "spaces": 2,
+  "generator-cli": {
+    "version": "7.8.0",
+    "generators": {
+      "go-server": {
+        "input-spec": "../api_athlet_monitoring/athlete_monitoring_api.yaml",
+        "generator-name": "go-server",
+        "output": ".api_athlet_monitoring",
+        "additionalProperties": {
+          "router": "chi",
+          "outputAsLibrary": true,
+          "onlyInterfaces": true,
+          "addResponseHeaders": true
+        }
+      }
+    }
+  }
+}
