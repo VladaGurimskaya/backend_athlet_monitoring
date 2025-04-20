@@ -5,3 +5,8 @@
 /.vscode/
 /*.sublime-project
 /*.sublime-workspace
+
+/.api_athlet_monitoring/README.md
+/.api_athlet_monitoring/.openapi-generator-ignore
+/.api_athlet_monitoring/api/openapi.yaml
+/.api_athlet_monitoring/.openapi-generator/*
