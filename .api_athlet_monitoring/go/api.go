@@ -19,8 +19,12 @@ import (
 // The AuthAPIRouter implementation should parse necessary information from the http request,
 // pass the data to a AuthAPIServicer to perform the required actions, then write the service results to the http response.
 type AuthAPIRouter interface {
+	AuthAthleteProfilePost(http.ResponseWriter, *http.Request)
+	AuthAthleteTeamPost(http.ResponseWriter, *http.Request)
+	AuthCancelInvitePost(http.ResponseWriter, *http.Request)
 	AuthChangePasswordPost(http.ResponseWriter, *http.Request)
 	AuthCreateInviteCodePost(http.ResponseWriter, *http.Request)
+	AuthGetAllInvitesGet(http.ResponseWriter, *http.Request)
 	AuthGetInviteDetailsPost(http.ResponseWriter, *http.Request)
 	AuthLoginPost(http.ResponseWriter, *http.Request)
 	AuthRegisterAthletePost(http.ResponseWriter, *http.Request)
@@ -59,8 +63,12 @@ type TrainingAPIRouter interface {
 // while the service implementation can be ignored with the .openapi-generator-ignore file
 // and updated with the logic required for the API.
 type AuthAPIServicer interface {
+	AuthAthleteProfilePost(context.Context, AthleteProfileRequest) (ImplResponse, error)
+	AuthAthleteTeamPost(context.Context, AthleteProfileRequest) (ImplResponse, error)
+	AuthCancelInvitePost(context.Context, InviteCancelRequest) (ImplResponse, error)
 	AuthChangePasswordPost(context.Context, AuthChangePasswordPostRequest) (ImplResponse, error)
 	AuthCreateInviteCodePost(context.Context, InviteCreateRequest) (ImplResponse, error)
+	AuthGetAllInvitesGet(context.Context) (ImplResponse, error)
 	AuthGetInviteDetailsPost(context.Context, InviteDetailsRequest) (ImplResponse, error)
 	AuthLoginPost(context.Context, LoginRequest) (ImplResponse, error)
 	AuthRegisterAthletePost(context.Context, AthleteRegisterRequest) (ImplResponse, error)

@@ -21,7 +21,30 @@ func NewServiceAuth(storage *storage.Storage) (*ServiceAuth, error) {
 }
 
 func (s *ServiceAuth) AuthChangePasswordPost(ctx context.Context, request api.AuthChangePasswordPostRequest) (api.ImplResponse, error) {
-	return api.ImplResponse{}, nil
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if err := s.storage.ChangePassword(accessClaims.UserID, request.OldPassword, request.NewPassword); err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка изменения пароля: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: "Пароль успешно изменен",
+	}, nil
 }
 
 func (s *ServiceAuth) AuthLoginPost(ctx context.Context, request api.LoginRequest) (api.ImplResponse, error) {
@@ -266,5 +289,137 @@ func (s *ServiceAuth) AuthGetInviteDetailsPost(ctx context.Context, request api.
 	return api.ImplResponse{
 		Code: 200,
 		Body: response,
+	}, nil
+}
+
+func (s *ServiceAuth) AuthAthleteProfilePost(ctx context.Context, request api.AthleteProfileRequest) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	userId := int(request.AthleteId)
+
+	if userId == 0 {
+		userId = accessClaims.UserID
+	}
+
+	profileInfo, err := s.storage.GetAthleteProfile(userId)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения профиля спортсмена: %v", err)
+	}
+
+	response := api.AthleteProfileResponse{
+		Email:       profileInfo.Email,
+		Phone:       profileInfo.Phone,
+		FirstName:   profileInfo.FirstName,
+		MiddleName:  profileInfo.MiddleName,
+		LastName:    profileInfo.LastName,
+		DateOfBirth: profileInfo.DateOfBirth.Format("2006-01-02"),
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: response,
+	}, nil
+}
+
+func (s *ServiceAuth) AuthAthleteTeamPost(ctx context.Context, request api.AthleteProfileRequest) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	_, err = utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	return api.ImplResponse{}, nil
+}
+
+func (s *ServiceAuth) AuthGetAllInvitesGet(ctx context.Context) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "admin" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания приглашения")
+	}
+
+	invites, err := s.storage.GetAllInvites()
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения всех приглашений: %v", err)
+	}
+
+	response := api.InviteAllResponse{
+		Invites: invites,
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: response,
+	}, nil
+}
+
+func (s *ServiceAuth) AuthCancelInvitePost(ctx context.Context, request api.InviteCancelRequest) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "admin" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания приглашения")
+	}
+
+	if err := s.storage.CancelInvite(int(request.InviteId)); err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка отмены приглашения: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: "Приглашение успешно отменено",
 	}, nil
 }

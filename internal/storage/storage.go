@@ -1,6 +1,7 @@
 package storage
 
 import (
+	api "backend_athlet_monitoring/.api_athlet_monitoring/go"
 	"backend_athlet_monitoring/internal/database"
 	"backend_athlet_monitoring/internal/models"
 	"backend_athlet_monitoring/internal/utils"
@@ -281,6 +282,123 @@ func (s *Storage) UseInviteCode(inviteCode string) error {
 
 	if err != nil {
 		return fmt.Errorf("ошибка использования приглашения: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) ChangePassword(userId int, oldPassword, newPassword string) error {
+	query := `SELECT password_hash FROM users WHERE user_id = $1`
+
+	var passwordHash string
+
+	err := s.db.QueryRow(query, userId).Scan(&passwordHash)
+	if err != nil {
+		return fmt.Errorf("ошибка получения хешированного пароля: %v", err)
+	}
+
+	err = utils.CheckPasswordHash(oldPassword, passwordHash)
+	if err != nil {
+		return fmt.Errorf("неверный пароль: %v", err)
+	}
+
+	newPasswordHash, err := utils.CreatePasswordHash(newPassword)
+	if err != nil {
+		return fmt.Errorf("ошибка хеширования нового пароля: %v", err)
+	}
+
+	query = `UPDATE users SET password_hash = $1 WHERE user_id = $2`
+
+	_, err = s.db.Exec(query, newPasswordHash, userId)
+	if err != nil {
+		return fmt.Errorf("ошибка обновления пароля: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetAthleteProfile(userId int) (models.Athlete, error) {
+	var athleteInfo models.Athlete
+
+	query := `
+		SELECT
+			email
+		FROM users
+		WHERE user_id = $1`
+
+	err := s.db.QueryRow(query, userId).Scan(&athleteInfo.Email)
+	if err != nil {
+		return models.Athlete{}, fmt.Errorf("ошибка получения информации о пользователе: %v", err)
+	}
+
+	query = `
+		SELECT
+			phone,
+			first_name,
+			middle_name,
+			last_name,
+			date_of_birth
+		FROM athletes
+		WHERE athlete_id = $1`
+
+	err = s.db.QueryRow(query, userId).Scan(
+		&athleteInfo.Phone,
+		&athleteInfo.FirstName,
+		&athleteInfo.MiddleName,
+		&athleteInfo.LastName,
+		&athleteInfo.DateOfBirth,
+	)
+	if err != nil {
+		return models.Athlete{}, fmt.Errorf("ошибка получения информации о пользователе: %v", err)
+	}
+
+	return athleteInfo, nil
+}
+
+func (s *Storage) GetAllInvites() ([]api.InviteDetailsResponse, error) {
+	query := `
+		SELECT
+			invite_id,
+			invite_code,
+			email,
+			role,
+			license_number,
+			organization_id,
+			is_used
+		FROM admininvites`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("ошибка получения приглашений: %v", err)
+	}
+	defer rows.Close()
+
+	var invites []api.InviteDetailsResponse
+	for rows.Next() {
+		var invite api.InviteDetailsResponse
+		if err := rows.Scan(
+			&invite.InviteId,
+			&invite.InviteCode,
+			&invite.Email,
+			&invite.Role,
+			&invite.LicenseNumber,
+			&invite.OrganizationId,
+			&invite.IsUsed,
+		); err != nil {
+			return nil, fmt.Errorf("ошибка получения приглашений: %v", err)
+		}
+		invites = append(invites, invite)
+	}
+
+	return invites, nil
+}
+
+func (s *Storage) CancelInvite(inviteId int) error {
+	query := `DELETE FROM admininvites WHERE invite_id = $1`
+
+	_, err := s.db.Exec(query, inviteId)
+	if err != nil {
+		return fmt.Errorf("ошибка отмены приглашения: %v", err)
 	}
 
 	return nil

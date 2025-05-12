@@ -11,6 +11,8 @@
 package openapi
 
 type InviteDetailsResponse struct {
+	InviteId int32 `json:"invite_id,omitempty"`
+
 	InviteCode string `json:"invite_code,omitempty"`
 
 	Email string `json:"email,omitempty"`
@@ -20,6 +22,8 @@ type InviteDetailsResponse struct {
 	LicenseNumber string `json:"license_number,omitempty"`
 
 	OrganizationId int32 `json:"organization_id,omitempty"`
+
+	IsUsed bool `json:"is_used,omitempty"`
 }
 
 // AssertInviteDetailsResponseRequired checks if the required fields are not zero-ed

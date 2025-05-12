@@ -49,6 +49,21 @@ func NewAuthAPIController(s AuthAPIServicer, opts ...AuthAPIOption) *AuthAPICont
 // Routes returns all the api routes for the AuthAPIController
 func (c *AuthAPIController) Routes() Routes {
 	return Routes{
+		"AuthAthleteProfilePost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/auth/athlete-profile",
+			c.AuthAthleteProfilePost,
+		},
+		"AuthAthleteTeamPost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/auth/athlete-team",
+			c.AuthAthleteTeamPost,
+		},
+		"AuthCancelInvitePost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/auth/cancel-invite",
+			c.AuthCancelInvitePost,
+		},
 		"AuthChangePasswordPost": Route{
 			strings.ToUpper("Post"),
 			"/api/v1/auth/change-password",
@@ -58,6 +73,11 @@ func (c *AuthAPIController) Routes() Routes {
 			strings.ToUpper("Post"),
 			"/api/v1/auth/create-invite-code",
 			c.AuthCreateInviteCodePost,
+		},
+		"AuthGetAllInvitesGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/auth/get-all-invites",
+			c.AuthGetAllInvitesGet,
 		},
 		"AuthGetInviteDetailsPost": Route{
 			strings.ToUpper("Post"),
@@ -80,6 +100,87 @@ func (c *AuthAPIController) Routes() Routes {
 			c.AuthRegisterInvitePost,
 		},
 	}
+}
+
+// AuthAthleteProfilePost - Профиль спортсмена
+func (c *AuthAPIController) AuthAthleteProfilePost(w http.ResponseWriter, r *http.Request) {
+	athleteProfileRequestParam := AthleteProfileRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestRequired(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestConstraints(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.AuthAthleteProfilePost(r.Context(), athleteProfileRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// AuthAthleteTeamPost - Команда спортсмена
+func (c *AuthAPIController) AuthAthleteTeamPost(w http.ResponseWriter, r *http.Request) {
+	athleteProfileRequestParam := AthleteProfileRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestRequired(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestConstraints(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.AuthAthleteTeamPost(r.Context(), athleteProfileRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// AuthCancelInvitePost - Отмена инвайта
+func (c *AuthAPIController) AuthCancelInvitePost(w http.ResponseWriter, r *http.Request) {
+	inviteCancelRequestParam := InviteCancelRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&inviteCancelRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertInviteCancelRequestRequired(inviteCancelRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertInviteCancelRequestConstraints(inviteCancelRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.AuthCancelInvitePost(r.Context(), inviteCancelRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
 }
 
 // AuthChangePasswordPost - Смена пароля пользователя
@@ -127,6 +228,18 @@ func (c *AuthAPIController) AuthCreateInviteCodePost(w http.ResponseWriter, r *h
 		return
 	}
 	result, err := c.service.AuthCreateInviteCodePost(r.Context(), inviteCreateRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// AuthGetAllInvitesGet - Все инвайты
+func (c *AuthAPIController) AuthGetAllInvitesGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.AuthGetAllInvitesGet(r.Context())
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)
