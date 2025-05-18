@@ -51,6 +51,31 @@ func NewTeamsAPIController(s TeamsAPIServicer, opts ...TeamsAPIOption) *TeamsAPI
 // Routes returns all the api routes for the TeamsAPIController
 func (c *TeamsAPIController) Routes() Routes {
 	return Routes{
+		"TeamAthleteRemovePost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/team/athlete-remove",
+			c.TeamAthleteRemovePost,
+		},
+		"TeamsAthletesPost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/teams/athletes",
+			c.TeamsAthletesPost,
+		},
+		"TeamsCoachesPost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/teams/coaches",
+			c.TeamsCoachesPost,
+		},
+		"TeamsCreatePost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/teams/create",
+			c.TeamsCreatePost,
+		},
+		"TeamsGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams",
+			c.TeamsGet,
+		},
 		"TeamsJoinPost": Route{
 			strings.ToUpper("Post"),
 			"/api/v1/teams/join",
@@ -67,6 +92,126 @@ func (c *TeamsAPIController) Routes() Routes {
 			c.TeamsJoinRequestIdRejectPost,
 		},
 	}
+}
+
+// TeamAthleteRemovePost - Удаление спортсмена из команды
+func (c *TeamsAPIController) TeamAthleteRemovePost(w http.ResponseWriter, r *http.Request) {
+	athleteProfileRequestParam := AthleteProfileRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestRequired(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertAthleteProfileRequestConstraints(athleteProfileRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamAthleteRemovePost(r.Context(), athleteProfileRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsAthletesPost - Список спортсменов в команде
+func (c *TeamsAPIController) TeamsAthletesPost(w http.ResponseWriter, r *http.Request) {
+	teamRequestParam := TeamRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&teamRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertTeamRequestRequired(teamRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertTeamRequestConstraints(teamRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamsAthletesPost(r.Context(), teamRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsCoachesPost - Список тренеров в команде
+func (c *TeamsAPIController) TeamsCoachesPost(w http.ResponseWriter, r *http.Request) {
+	teamRequestParam := TeamRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&teamRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertTeamRequestRequired(teamRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertTeamRequestConstraints(teamRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamsCoachesPost(r.Context(), teamRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsCreatePost - Создание команды
+func (c *TeamsAPIController) TeamsCreatePost(w http.ResponseWriter, r *http.Request) {
+	teamCreateRequestParam := TeamCreateRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&teamCreateRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertTeamCreateRequestRequired(teamCreateRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertTeamCreateRequestConstraints(teamCreateRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamsCreatePost(r.Context(), teamCreateRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsGet - Список команд
+func (c *TeamsAPIController) TeamsGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamsGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
 }
 
 // TeamsJoinPost - Запрос спортсмена на вступление в команду

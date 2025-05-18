@@ -69,7 +69,7 @@ func (s *ServiceAuth) AuthLoginPost(ctx context.Context, request api.LoginReques
 		},
 	}
 
-	tokens := api.TokenResponse{
+	tokens := api.LoginResponse{
 		Role: user.Role,
 	}
 

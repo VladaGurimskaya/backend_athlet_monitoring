@@ -13,22 +13,23 @@ package openapi
 type BiometricInput struct {
 	Date string `json:"date"`
 
-	TimeOfDay string `json:"time_of_day"`
+	MorningPulse int32 `json:"morning_pulse"`
 
-	Time string `json:"time,omitempty"`
+	EveningPulse int32 `json:"evening_pulse"`
 
-	Pulse int32 `json:"pulse,omitempty"`
+	HRV int32 `json:"HRV"`
 
-	HRV int32 `json:"HRV,omitempty"`
-
-	Weight float32 `json:"weight,omitempty"`
+	Weight float32 `json:"weight"`
 }
 
 // AssertBiometricInputRequired checks if the required fields are not zero-ed
 func AssertBiometricInputRequired(obj BiometricInput) error {
 	elements := map[string]interface{}{
-		"date":        obj.Date,
-		"time_of_day": obj.TimeOfDay,
+		"date":          obj.Date,
+		"morning_pulse": obj.MorningPulse,
+		"evening_pulse": obj.EveningPulse,
+		"HRV":           obj.HRV,
+		"weight":        obj.Weight,
 	}
 	for name, el := range elements {
 		if isZero := IsZeroValue(el); isZero {

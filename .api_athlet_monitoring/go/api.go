@@ -42,6 +42,11 @@ type BiometricsAPIRouter interface {
 // The TeamsAPIRouter implementation should parse necessary information from the http request,
 // pass the data to a TeamsAPIServicer to perform the required actions, then write the service results to the http response.
 type TeamsAPIRouter interface {
+	TeamAthleteRemovePost(http.ResponseWriter, *http.Request)
+	TeamsAthletesPost(http.ResponseWriter, *http.Request)
+	TeamsCoachesPost(http.ResponseWriter, *http.Request)
+	TeamsCreatePost(http.ResponseWriter, *http.Request)
+	TeamsGet(http.ResponseWriter, *http.Request)
 	TeamsJoinPost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdApprovePost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdRejectPost(http.ResponseWriter, *http.Request)
@@ -88,6 +93,11 @@ type BiometricsAPIServicer interface {
 // while the service implementation can be ignored with the .openapi-generator-ignore file
 // and updated with the logic required for the API.
 type TeamsAPIServicer interface {
+	TeamAthleteRemovePost(context.Context, AthleteProfileRequest) (ImplResponse, error)
+	TeamsAthletesPost(context.Context, TeamRequest) (ImplResponse, error)
+	TeamsCoachesPost(context.Context, TeamRequest) (ImplResponse, error)
+	TeamsCreatePost(context.Context, TeamCreateRequest) (ImplResponse, error)
+	TeamsGet(context.Context) (ImplResponse, error)
 	TeamsJoinPost(context.Context, TeamsJoinPostRequest) (ImplResponse, error)
 	TeamsJoinRequestIdApprovePost(context.Context, int32) (ImplResponse, error)
 	TeamsJoinRequestIdRejectPost(context.Context, int32) (ImplResponse, error)

@@ -403,3 +403,186 @@ func (s *Storage) CancelInvite(inviteId int) error {
 
 	return nil
 }
+
+func (s *Storage) CreateBiometricData(athleteId int, request api.BiometricInput) error {
+	query := `INSERT INTO biometricdata (
+		athlete_id,
+        date,
+    	morning_pulse,
+        evening_pulse,
+    	hrv,
+        weight
+	) VALUES ($1, $2, $3, $4, $5, $6)`
+
+	_, err := s.db.Exec(
+		query,
+		athleteId,
+		request.Date,
+		request.MorningPulse,
+		request.EveningPulse,
+		request.HRV,
+		request.Weight,
+	)
+	if err != nil {
+		return fmt.Errorf("ошибка создания биометрических данных: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) CreateTeam(teamName string, sportTypeId int) (int, error) {
+	query := `INSERT INTO teams (team_name, sport_type_id) VALUES ($1, $2) RETURNING team_id`
+
+	var teamId int
+	err := s.db.QueryRow(query, teamName, sportTypeId).Scan(&teamId)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка создания команды: %v", err)
+	}
+
+	return teamId, nil
+}
+
+func (s *Storage) AddCoachToTeam(coachId, teamId int, role string) error {
+	query := `INSERT INTO coachteamlink (coach_id, team_id, role_in_team) VALUES ($1, $2, $3)`
+
+	_, err := s.db.Exec(query, coachId, teamId, role)
+	if err != nil {
+		return fmt.Errorf("ошибка добавления тренера в команду: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetTeamsByCoach(coachId int) (api.TeamResponse, error) {
+	query := `
+		SELECT
+			t.team_id,
+			t.team_name,
+			s.name AS sport_type,
+			COUNT(a.athlete_id) AS count_athletes
+		FROM teams t
+		JOIN coachteamlink ctl ON t.team_id = ctl.team_id
+		JOIN sporttypes s ON t.sport_type_id = s.sport_type_id
+		LEFT JOIN athletes a ON a.team_id = t.team_id
+		WHERE ctl.coach_id = $1
+		GROUP BY t.team_id, t.team_name, s.name
+	`
+
+	rows, err := s.db.Query(query, coachId)
+	if err != nil {
+		return api.TeamResponse{}, fmt.Errorf("ошибка получения команд: %v", err)
+	}
+	defer rows.Close()
+
+	var teamList []api.Team
+	for rows.Next() {
+		var team api.Team
+		if err := rows.Scan(
+			&team.TeamId,
+			&team.TeamName,
+			&team.SportType,
+			&team.CountAthletes,
+		); err != nil {
+			return api.TeamResponse{}, fmt.Errorf("ошибка сканирования команды: %v", err)
+		}
+		teamList = append(teamList, team)
+	}
+
+	return api.TeamResponse{Teams: teamList}, nil
+}
+
+func (s *Storage) GetAthletesByTeam(teamId int) (api.TeamGetAthletesResponse, error) {
+	query := `
+		SELECT
+			a.athlete_id,
+			a.first_name,
+			a.last_name,
+			a.middle_name,
+			a.date_of_birth,
+			a.phone,
+			u.email
+		FROM athletes a
+		JOIN users u ON u.user_id = a.athlete_id
+		WHERE a.team_id = $1
+	`
+
+	rows, err := s.db.Query(query, teamId)
+	if err != nil {
+		return api.TeamGetAthletesResponse{}, fmt.Errorf("ошибка получения атлетов: %v", err)
+	}
+	defer rows.Close()
+
+	var athletes []api.AthleteProfileResponse
+	for rows.Next() {
+		var athlete api.AthleteProfileResponse
+		if err := rows.Scan(
+			&athlete.AthleteId,
+			&athlete.FirstName,
+			&athlete.LastName,
+			&athlete.MiddleName,
+			&athlete.DateOfBirth,
+			&athlete.Phone,
+			&athlete.Email,
+		); err != nil {
+			return api.TeamGetAthletesResponse{}, fmt.Errorf("ошибка сканирования атлета: %v", err)
+		}
+
+		athletes = append(athletes, athlete)
+	}
+
+	return api.TeamGetAthletesResponse{Athletes: athletes}, nil
+}
+
+func (s *Storage) RemoveAthleteFromTeam(athleteId int) error {
+	query := `UPDATE athletes SET team_id = NULL WHERE athlete_id = $1`
+
+	_, err := s.db.Exec(query, athleteId)
+	if err != nil {
+		return fmt.Errorf("ошибка удаления атлета из команды: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetCoachesByTeam(teamId int) (api.TeamGetCoachesResponse, error) {
+	query := `
+		SELECT
+			c.coach_id,
+			c.first_name,
+			c.last_name,
+			c.middle_name,
+			c.phone,
+			u.email,
+			ctl.role_in_team
+		FROM coaches c
+		JOIN users u ON u.user_id = c.coach_id
+		JOIN coachteamlink ctl ON c.coach_id = ctl.coach_id
+		WHERE ctl.team_id = $1
+	`
+
+	rows, err := s.db.Query(query, teamId)
+	if err != nil {
+		return api.TeamGetCoachesResponse{}, fmt.Errorf("ошибка получения тренеров: %v", err)
+	}
+	defer rows.Close()
+
+	var coaches []api.CoachProfileResponse
+	for rows.Next() {
+		var coach api.CoachProfileResponse
+		if err := rows.Scan(
+			&coach.CoachId,
+			&coach.FirstName,
+			&coach.LastName,
+			&coach.MiddleName,
+			&coach.Phone,
+			&coach.Email,
+			&coach.RoleInTeam,
+		); err != nil {
+			return api.TeamGetCoachesResponse{}, fmt.Errorf("ошибка сканирования тренера: %v", err)
+		}
+
+		coaches = append(coaches, coach)
+	}
+
+	return api.TeamGetCoachesResponse{Coaches: coaches}, nil
+}
