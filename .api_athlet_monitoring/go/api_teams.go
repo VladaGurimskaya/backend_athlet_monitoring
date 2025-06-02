@@ -56,6 +56,16 @@ func (c *TeamsAPIController) Routes() Routes {
 			"/api/v1/team/athlete-remove",
 			c.TeamAthleteRemovePost,
 		},
+		"TeamAthleteTeamStatusGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/team/athlete-team-status",
+			c.TeamAthleteTeamStatusGet,
+		},
+		"TeamsAllAthletesGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams/all-athletes",
+			c.TeamsAllAthletesGet,
+		},
 		"TeamsAthletesPost": Route{
 			strings.ToUpper("Post"),
 			"/api/v1/teams/athletes",
@@ -91,6 +101,16 @@ func (c *TeamsAPIController) Routes() Routes {
 			"/api/v1/teams/join/{request_id}/reject",
 			c.TeamsJoinRequestIdRejectPost,
 		},
+		"TeamsJoinsListGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams/joins-list",
+			c.TeamsJoinsListGet,
+		},
+		"TeamsJoinsListTeamIdGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams/joins-list/{team_id}",
+			c.TeamsJoinsListTeamIdGet,
+		},
 	}
 }
 
@@ -112,6 +132,30 @@ func (c *TeamsAPIController) TeamAthleteRemovePost(w http.ResponseWriter, r *htt
 		return
 	}
 	result, err := c.service.TeamAthleteRemovePost(r.Context(), athleteProfileRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamAthleteTeamStatusGet - Заявка на вступление в команду
+func (c *TeamsAPIController) TeamAthleteTeamStatusGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamAthleteTeamStatusGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsAllAthletesGet - Список всех спортсменов
+func (c *TeamsAPIController) TeamsAllAthletesGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamsAllAthletesGet(r.Context())
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)
@@ -216,22 +260,22 @@ func (c *TeamsAPIController) TeamsGet(w http.ResponseWriter, r *http.Request) {
 
 // TeamsJoinPost - Запрос спортсмена на вступление в команду
 func (c *TeamsAPIController) TeamsJoinPost(w http.ResponseWriter, r *http.Request) {
-	teamsJoinPostRequestParam := TeamsJoinPostRequest{}
+	teamJoinRequestParam := TeamJoinRequest{}
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
-	if err := d.Decode(&teamsJoinPostRequestParam); err != nil {
+	if err := d.Decode(&teamJoinRequestParam); err != nil {
 		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
 		return
 	}
-	if err := AssertTeamsJoinPostRequestRequired(teamsJoinPostRequestParam); err != nil {
+	if err := AssertTeamJoinRequestRequired(teamJoinRequestParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	if err := AssertTeamsJoinPostRequestConstraints(teamsJoinPostRequestParam); err != nil {
+	if err := AssertTeamJoinRequestConstraints(teamJoinRequestParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	result, err := c.service.TeamsJoinPost(r.Context(), teamsJoinPostRequestParam)
+	result, err := c.service.TeamsJoinPost(r.Context(), teamJoinRequestParam)
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)
@@ -272,6 +316,38 @@ func (c *TeamsAPIController) TeamsJoinRequestIdRejectPost(w http.ResponseWriter,
 		return
 	}
 	result, err := c.service.TeamsJoinRequestIdRejectPost(r.Context(), requestIdParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsJoinsListGet - Список заявок на вступление в команды
+func (c *TeamsAPIController) TeamsJoinsListGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamsJoinsListGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsJoinsListTeamIdGet - Список заявок на вступление в команду
+func (c *TeamsAPIController) TeamsJoinsListTeamIdGet(w http.ResponseWriter, r *http.Request) {
+	teamIdParam, err := parseNumericParameter[int32](
+		chi.URLParam(r, "team_id"),
+		WithRequire[int32](parseInt32),
+	)
+	if err != nil {
+		c.errorHandler(w, r, &ParsingError{Param: "team_id", Err: err}, nil)
+		return
+	}
+	result, err := c.service.TeamsJoinsListTeamIdGet(r.Context(), teamIdParam)
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)

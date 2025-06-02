@@ -51,6 +51,11 @@ func NewTrainingAPIController(s TrainingAPIServicer, opts ...TrainingAPIOption) 
 // Routes returns all the api routes for the TrainingAPIController
 func (c *TrainingAPIController) Routes() Routes {
 	return Routes{
+		"GetTrainingPlansPost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/get-training-plans",
+			c.GetTrainingPlansPost,
+		},
 		"TrainingPlansItemsItemIdDelete": Route{
 			strings.ToUpper("Delete"),
 			"/api/v1/training-plans/items/{item_id}",
@@ -77,6 +82,18 @@ func (c *TrainingAPIController) Routes() Routes {
 			c.TrainingPlansPost,
 		},
 	}
+}
+
+// GetTrainingPlansPost - Список тренировочных планов
+func (c *TrainingAPIController) GetTrainingPlansPost(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.GetTrainingPlansPost(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
 }
 
 // TrainingPlansItemsItemIdDelete - Удаление пункта плана
@@ -179,22 +196,22 @@ func (c *TrainingAPIController) TrainingPlansPlanIdItemsPost(w http.ResponseWrit
 		c.errorHandler(w, r, &ParsingError{Param: "plan_id", Err: err}, nil)
 		return
 	}
-	trainingPlansPlanIdItemsPostRequestParam := TrainingPlansPlanIdItemsPostRequest{}
+	trainingPlanItemCreateParam := TrainingPlanItemCreate{}
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
-	if err := d.Decode(&trainingPlansPlanIdItemsPostRequestParam); err != nil {
+	if err := d.Decode(&trainingPlanItemCreateParam); err != nil {
 		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
 		return
 	}
-	if err := AssertTrainingPlansPlanIdItemsPostRequestRequired(trainingPlansPlanIdItemsPostRequestParam); err != nil {
+	if err := AssertTrainingPlanItemCreateRequired(trainingPlanItemCreateParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	if err := AssertTrainingPlansPlanIdItemsPostRequestConstraints(trainingPlansPlanIdItemsPostRequestParam); err != nil {
+	if err := AssertTrainingPlanItemCreateConstraints(trainingPlanItemCreateParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	result, err := c.service.TrainingPlansPlanIdItemsPost(r.Context(), planIdParam, trainingPlansPlanIdItemsPostRequestParam)
+	result, err := c.service.TrainingPlansPlanIdItemsPost(r.Context(), planIdParam, trainingPlanItemCreateParam)
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)
@@ -206,22 +223,22 @@ func (c *TrainingAPIController) TrainingPlansPlanIdItemsPost(w http.ResponseWrit
 
 // TrainingPlansPost - Создание тренировочного плана
 func (c *TrainingAPIController) TrainingPlansPost(w http.ResponseWriter, r *http.Request) {
-	trainingPlansPostRequestParam := TrainingPlansPostRequest{}
+	trainingPlanCreateParam := TrainingPlanCreate{}
 	d := json.NewDecoder(r.Body)
 	d.DisallowUnknownFields()
-	if err := d.Decode(&trainingPlansPostRequestParam); err != nil {
+	if err := d.Decode(&trainingPlanCreateParam); err != nil {
 		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
 		return
 	}
-	if err := AssertTrainingPlansPostRequestRequired(trainingPlansPostRequestParam); err != nil {
+	if err := AssertTrainingPlanCreateRequired(trainingPlanCreateParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	if err := AssertTrainingPlansPostRequestConstraints(trainingPlansPostRequestParam); err != nil {
+	if err := AssertTrainingPlanCreateConstraints(trainingPlanCreateParam); err != nil {
 		c.errorHandler(w, r, err, nil)
 		return
 	}
-	result, err := c.service.TrainingPlansPost(r.Context(), trainingPlansPostRequestParam)
+	result, err := c.service.TrainingPlansPost(r.Context(), trainingPlanCreateParam)
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)

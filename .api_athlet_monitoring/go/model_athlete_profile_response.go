@@ -24,6 +24,10 @@ type AthleteProfileResponse struct {
 	DateOfBirth string `json:"date_of_birth,omitempty"`
 
 	Phone string `json:"phone,omitempty"`
+
+	TeamName string `json:"team_name,omitempty"`
+
+	TeamSignedDate string `json:"team_signed_date,omitempty"`
 }
 
 // AssertAthleteProfileResponseRequired checks if the required fields are not zero-ed

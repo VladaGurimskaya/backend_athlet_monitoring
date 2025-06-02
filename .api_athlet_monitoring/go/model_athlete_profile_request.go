@@ -12,6 +12,8 @@ package openapi
 
 type AthleteProfileRequest struct {
 	AthleteId int32 `json:"athlete_id,omitempty"`
+
+	TeamId int32 `json:"team_id,omitempty"`
 }
 
 // AssertAthleteProfileRequestRequired checks if the required fields are not zero-ed

@@ -43,6 +43,8 @@ type BiometricsAPIRouter interface {
 // pass the data to a TeamsAPIServicer to perform the required actions, then write the service results to the http response.
 type TeamsAPIRouter interface {
 	TeamAthleteRemovePost(http.ResponseWriter, *http.Request)
+	TeamAthleteTeamStatusGet(http.ResponseWriter, *http.Request)
+	TeamsAllAthletesGet(http.ResponseWriter, *http.Request)
 	TeamsAthletesPost(http.ResponseWriter, *http.Request)
 	TeamsCoachesPost(http.ResponseWriter, *http.Request)
 	TeamsCreatePost(http.ResponseWriter, *http.Request)
@@ -50,12 +52,15 @@ type TeamsAPIRouter interface {
 	TeamsJoinPost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdApprovePost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdRejectPost(http.ResponseWriter, *http.Request)
+	TeamsJoinsListGet(http.ResponseWriter, *http.Request)
+	TeamsJoinsListTeamIdGet(http.ResponseWriter, *http.Request)
 }
 
 // TrainingAPIRouter defines the required methods for binding the api requests to a responses for the TrainingAPI
 // The TrainingAPIRouter implementation should parse necessary information from the http request,
 // pass the data to a TrainingAPIServicer to perform the required actions, then write the service results to the http response.
 type TrainingAPIRouter interface {
+	GetTrainingPlansPost(http.ResponseWriter, *http.Request)
 	TrainingPlansItemsItemIdDelete(http.ResponseWriter, *http.Request)
 	TrainingPlansItemsItemIdOverridePost(http.ResponseWriter, *http.Request)
 	TrainingPlansPlanIdAssignPost(http.ResponseWriter, *http.Request)
@@ -94,13 +99,17 @@ type BiometricsAPIServicer interface {
 // and updated with the logic required for the API.
 type TeamsAPIServicer interface {
 	TeamAthleteRemovePost(context.Context, AthleteProfileRequest) (ImplResponse, error)
+	TeamAthleteTeamStatusGet(context.Context) (ImplResponse, error)
+	TeamsAllAthletesGet(context.Context) (ImplResponse, error)
 	TeamsAthletesPost(context.Context, TeamRequest) (ImplResponse, error)
 	TeamsCoachesPost(context.Context, TeamRequest) (ImplResponse, error)
 	TeamsCreatePost(context.Context, TeamCreateRequest) (ImplResponse, error)
 	TeamsGet(context.Context) (ImplResponse, error)
-	TeamsJoinPost(context.Context, TeamsJoinPostRequest) (ImplResponse, error)
+	TeamsJoinPost(context.Context, TeamJoinRequest) (ImplResponse, error)
 	TeamsJoinRequestIdApprovePost(context.Context, int32) (ImplResponse, error)
 	TeamsJoinRequestIdRejectPost(context.Context, int32) (ImplResponse, error)
+	TeamsJoinsListGet(context.Context) (ImplResponse, error)
+	TeamsJoinsListTeamIdGet(context.Context, int32) (ImplResponse, error)
 }
 
 // TrainingAPIServicer defines the api actions for the TrainingAPI service
@@ -108,9 +117,10 @@ type TeamsAPIServicer interface {
 // while the service implementation can be ignored with the .openapi-generator-ignore file
 // and updated with the logic required for the API.
 type TrainingAPIServicer interface {
+	GetTrainingPlansPost(context.Context) (ImplResponse, error)
 	TrainingPlansItemsItemIdDelete(context.Context, int32) (ImplResponse, error)
 	TrainingPlansItemsItemIdOverridePost(context.Context, int32, TrainingPlansItemsItemIdOverridePostRequest) (ImplResponse, error)
 	TrainingPlansPlanIdAssignPost(context.Context, int32, TrainingPlansPlanIdAssignPostRequest) (ImplResponse, error)
-	TrainingPlansPlanIdItemsPost(context.Context, int32, TrainingPlansPlanIdItemsPostRequest) (ImplResponse, error)
-	TrainingPlansPost(context.Context, TrainingPlansPostRequest) (ImplResponse, error)
+	TrainingPlansPlanIdItemsPost(context.Context, int32, TrainingPlanItemCreate) (ImplResponse, error)
+	TrainingPlansPost(context.Context, TrainingPlanCreate) (ImplResponse, error)
 }

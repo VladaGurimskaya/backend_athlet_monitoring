@@ -7,6 +7,7 @@ import (
 	"backend_athlet_monitoring/internal/utils"
 	"context"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -343,14 +344,25 @@ func (s *ServiceAuth) AuthAthleteTeamPost(ctx context.Context, request api.Athle
 		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
 	}
 
-	_, err = utils.VerifyAccessToken(httpReq)
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
 	if err != nil {
 		return api.ImplResponse{
 			Code: 401,
 		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
 	}
 
-	return api.ImplResponse{}, nil
+	teamInfo, err := s.storage.GetTeamByAthlete(accessClaims.UserID)
+	if err != nil {
+		log.Println("ошибка получения команды спортсмена: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения команды спортсмена: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: teamInfo,
+	}, nil
 }
 
 func (s *ServiceAuth) AuthGetAllInvitesGet(ctx context.Context) (api.ImplResponse, error) {

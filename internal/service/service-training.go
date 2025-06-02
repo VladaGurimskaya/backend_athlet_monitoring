@@ -3,7 +3,10 @@ package service
 import (
 	api "backend_athlet_monitoring/.api_athlet_monitoring/go"
 	"backend_athlet_monitoring/internal/storage"
+	"backend_athlet_monitoring/internal/utils"
 	"context"
+	"fmt"
+	"log"
 )
 
 type ServiceTraining struct {
@@ -28,10 +31,97 @@ func (s *ServiceTraining) TrainingPlansPlanIdAssignPost(ctx context.Context, pla
 	return api.ImplResponse{}, nil
 }
 
-func (s *ServiceTraining) TrainingPlansPlanIdItemsPost(ctx context.Context, planId int32, request api.TrainingPlansPlanIdItemsPostRequest) (api.ImplResponse, error) {
-	return api.ImplResponse{}, nil
+func (s *ServiceTraining) TrainingPlansPlanIdItemsPost(ctx context.Context, planId int32, request api.TrainingPlanItemCreate) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания команды")
+	}
+
+	return api.ImplResponse{
+		Code: 201,
+	}, nil
 }
 
-func (s *ServiceTraining) TrainingPlansPost(ctx context.Context, request api.TrainingPlansPostRequest) (api.ImplResponse, error) {
-	return api.ImplResponse{}, nil
+func (s *ServiceTraining) TrainingPlansPost(ctx context.Context, request api.TrainingPlanCreate) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания команды")
+	}
+
+	err = s.storage.CreateTrainingPlan(request, accessClaims.UserID)
+	if err != nil {
+		log.Println("ошибка создания тренировочного плана: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка создания тренировочного плана: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 201,
+	}, nil
+}
+
+func (s *ServiceTraining) GetTrainingPlansPost(ctx context.Context) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания команды")
+	}
+
+	trainingPlanList, err := s.storage.GetTrainingPlans(accessClaims.UserID)
+	if err != nil {
+		log.Println("ошибка получения тренировочных планов: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения тренировочных планов: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: trainingPlanList,
+	}, nil
 }

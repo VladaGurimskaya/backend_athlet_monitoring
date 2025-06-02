@@ -453,6 +453,102 @@ func (s *Storage) AddCoachToTeam(coachId, teamId int, role string) error {
 	return nil
 }
 
+func (s *Storage) GetAllAthletes(coachId int) (api.AllAthletesResponse, error) {
+	query := `
+		SELECT
+			a.athlete_id,
+			a.first_name,
+			a.middle_name,
+			a.last_name,
+			a.date_of_birth,
+			u.email,
+			t.team_name,
+			tjr.reviewed_at
+		FROM athletes a
+		JOIN users u ON u.user_id = a.athlete_id
+		JOIN teams t ON t.team_id = a.team_id
+		JOIN teamjoinrequests tjr ON tjr.athlete_id = a.athlete_id
+		JOIN coachteamlink ctl ON ctl.team_id = t.team_id
+		WHERE ctl.coach_id = $1
+		ORDER BY tjr.reviewed_at DESC`
+
+	rows, err := s.db.Query(query, coachId)
+	if err != nil {
+		return api.AllAthletesResponse{}, fmt.Errorf("ошибка получения участников: %v", err)
+	}
+	defer rows.Close()
+
+	var athletes []api.AthleteProfileResponse
+	for rows.Next() {
+		var athlete api.AthleteProfileResponse
+		if err := rows.Scan(
+			&athlete.AthleteId,
+			&athlete.FirstName,
+			&athlete.MiddleName,
+			&athlete.LastName,
+			&athlete.DateOfBirth,
+			&athlete.Email,
+			&athlete.TeamName,
+			&athlete.TeamSignedDate,
+		); err != nil {
+			return api.AllAthletesResponse{}, fmt.Errorf("ошибка получения участников: %v", err)
+		}
+
+		athletes = append(athletes, athlete)
+	}
+
+	return api.AllAthletesResponse{
+		Athletes: athletes,
+	}, nil
+}
+
+func (s *Storage) GetAthleteTeamStatus(athleteId int) (api.TeamAthleteStatusResponse, error) {
+	query := `
+		SELECT
+			tjr.request_id,
+			t.team_name,
+			tjr.requested_at,
+			tjr.status
+		FROM teamjoinrequests tjr
+		JOIN teams t ON t.team_id = tjr.team_id
+		WHERE tjr.athlete_id = $1`
+
+	var status api.TeamAthleteStatusResponse
+	err := s.db.QueryRow(query, athleteId).Scan(
+		&status.RequestId,
+		&status.TeamName,
+		&status.RequestedAt,
+		&status.Status,
+	)
+	if err != nil {
+		return api.TeamAthleteStatusResponse{}, fmt.Errorf("ошибка получения команды: %v", err)
+	}
+
+	return status, nil
+}
+
+func (s *Storage) GetTeamByAthlete(athleteId int) (api.AthleteTeamResponse, error) {
+	query := `
+		SELECT
+			t.team_name,
+			s.name AS sport_type
+		FROM athletes a
+		JOIN teams t ON a.team_id = t.team_id
+		JOIN sporttypes s ON t.sport_type_id = s.sport_type_id
+		WHERE a.athlete_id = $1`
+
+	var teamInfo api.AthleteTeamResponse
+	err := s.db.QueryRow(query, athleteId).Scan(
+		&teamInfo.TeamName,
+		&teamInfo.SportType,
+	)
+	if err != nil {
+		return api.AthleteTeamResponse{}, fmt.Errorf("ошибка получения команды: %v", err)
+	}
+
+	return teamInfo, nil
+}
+
 func (s *Storage) GetTeamsByCoach(coachId int) (api.TeamResponse, error) {
 	query := `
 		SELECT
@@ -533,12 +629,18 @@ func (s *Storage) GetAthletesByTeam(teamId int) (api.TeamGetAthletesResponse, er
 	return api.TeamGetAthletesResponse{Athletes: athletes}, nil
 }
 
-func (s *Storage) RemoveAthleteFromTeam(athleteId int) error {
+func (s *Storage) RemoveAthleteFromTeam(athleteId, teamId int) error {
 	query := `UPDATE athletes SET team_id = NULL WHERE athlete_id = $1`
 
 	_, err := s.db.Exec(query, athleteId)
 	if err != nil {
 		return fmt.Errorf("ошибка удаления атлета из команды: %v", err)
+	}
+
+	query = `DELETE FROM teamjoinrequests WHERE athlete_id = $1 AND team_id = $2`
+	_, err = s.db.Exec(query, athleteId, teamId)
+	if err != nil {
+		return fmt.Errorf("ошибка удаления запроса на вступление в команду: %v", err)
 	}
 
 	return nil
@@ -585,4 +687,214 @@ func (s *Storage) GetCoachesByTeam(teamId int) (api.TeamGetCoachesResponse, erro
 	}
 
 	return api.TeamGetCoachesResponse{Coaches: coaches}, nil
+}
+
+func (s *Storage) GetAllTeams() (api.TeamResponse, error) {
+	query := `SELECT team_id, team_name FROM teams`
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return api.TeamResponse{}, fmt.Errorf("ошибка получения команд: %v", err)
+	}
+	defer rows.Close()
+
+	var teamList []api.Team
+	for rows.Next() {
+		var team api.Team
+		if err := rows.Scan(
+			&team.TeamId,
+			&team.TeamName,
+		); err != nil {
+			return api.TeamResponse{}, fmt.Errorf("ошибка сканирования команды: %v", err)
+		}
+		teamList = append(teamList, team)
+	}
+
+	return api.TeamResponse{Teams: teamList}, nil
+}
+
+func (s *Storage) CreateJoinTeamRequest(teamId, athleteId int) error {
+	query := `INSERT INTO teamjoinrequests (team_id, athlete_id) VALUES ($1, $2)`
+	_, err := s.db.Exec(query, teamId, athleteId)
+	if err != nil {
+		return fmt.Errorf("ошибка создания запроса на вступление в команду: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetTeamsJoinRequests(coachId int) (api.TeamJoinsListResponse, error) {
+	query := `
+		SELECT
+			tjr.request_id,
+			a.last_name,
+			a.first_name,
+			a.middle_name,
+			u.email,
+			t.team_name,
+			tjr.requested_at,
+			tjr.status
+		FROM teamjoinrequests tjr
+		JOIN athletes a ON a.athlete_id = tjr.athlete_id
+		JOIN teams t ON t.team_id = tjr.team_id
+		JOIN users u ON u.user_id = a.athlete_id
+		JOIN coachteamlink ctl ON ctl.team_id = tjr.team_id
+		WHERE ctl.coach_id = $1`
+
+	rows, err := s.db.Query(query, coachId)
+	if err != nil {
+		return api.TeamJoinsListResponse{}, fmt.Errorf("ошибка получения запросов на вступление в команду: %v", err)
+	}
+	defer rows.Close()
+
+	var requests []api.TeamJoin
+	for rows.Next() {
+		var request api.TeamJoin
+		if err := rows.Scan(
+			&request.RequestId,
+			&request.SecondName,
+			&request.FirstName,
+			&request.MiddleName,
+			&request.Email,
+			&request.TeamName,
+			&request.RequestDate,
+			&request.Status,
+		); err != nil {
+			return api.TeamJoinsListResponse{}, fmt.Errorf("ошибка сканирования запроса на вступление в команду: %v", err)
+		}
+		requests = append(requests, request)
+	}
+
+	return api.TeamJoinsListResponse{Joins: requests}, nil
+}
+
+func (s *Storage) GetTeamsJoinRequestsByTeamId(teamId int) (api.TeamJoinsListResponse, error) {
+	query := `
+		SELECT
+			tjr.request_id,
+			a.last_name,
+			a.first_name,
+			a.middle_name,
+			u.email,
+			t.team_name,
+			tjr.requested_at,
+			tjr.status
+		FROM teamjoinrequests tjr
+		JOIN athletes a ON a.athlete_id = tjr.athlete_id
+		JOIN teams t ON t.team_id = tjr.team_id
+		JOIN users u ON u.user_id = a.athlete_id
+		WHERE tjr.team_id = $1 AND tjr.status = 'pending'`
+
+	rows, err := s.db.Query(query, teamId)
+	if err != nil {
+		return api.TeamJoinsListResponse{}, fmt.Errorf("ошибка получения запросов на вступление в команду: %v", err)
+	}
+	defer rows.Close()
+
+	var requests []api.TeamJoin
+	for rows.Next() {
+		var request api.TeamJoin
+		if err := rows.Scan(
+			&request.RequestId,
+			&request.SecondName,
+			&request.FirstName,
+			&request.MiddleName,
+			&request.Email,
+			&request.TeamName,
+			&request.RequestDate,
+			&request.Status,
+		); err != nil {
+			return api.TeamJoinsListResponse{}, fmt.Errorf("ошибка сканирования запроса на вступление в команду: %v", err)
+		}
+		requests = append(requests, request)
+	}
+
+	return api.TeamJoinsListResponse{Joins: requests}, nil
+}
+
+func (s *Storage) ApproveJoinTeamRequest(requestId, coachId int) error {
+	query := `UPDATE teamjoinrequests SET status = 'approved', reviewed_by = $1, reviewed_at = CURRENT_TIMESTAMP WHERE request_id = $2`
+
+	_, err := s.db.Exec(query, coachId, requestId)
+	if err != nil {
+		return fmt.Errorf("ошибка подтверждения запроса на вступление в команду: %v", err)
+	}
+
+	var teamId, athleteId int
+
+	query = `SELECT team_id, athlete_id FROM teamjoinrequests WHERE request_id = $1`
+	err = s.db.QueryRow(query, requestId).Scan(&teamId, &athleteId)
+	if err != nil {
+		return fmt.Errorf("ошибка получения данных запроса на вступление в команду: %v", err)
+	}
+
+	query = `UPDATE athletes SET team_id = $1 WHERE athlete_id = $2`
+	_, err = s.db.Exec(query, teamId, athleteId)
+	if err != nil {
+		return fmt.Errorf("ошибка обновления данных атлета: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) RejectJoinTeamRequest(requestId int) error {
+	query := `UPDATE teamjoinrequests SET status = 'rejected' WHERE request_id = $1`
+
+	_, err := s.db.Exec(query, requestId)
+	if err != nil {
+		return fmt.Errorf("ошибка отклонения запроса на вступление в команду: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) CreateTrainingPlan(request api.TrainingPlanCreate, coachId int) error {
+	query := `INSERT INTO trainingplan (title, team_id, description, start_date, end_date, status, period_type_id, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+
+	_, err := s.db.Exec(query, request.Title, request.TeamId, request.Description, request.StartDate, request.EndDate, request.Status, request.PeriodTypeId, coachId)
+	if err != nil {
+		return fmt.Errorf("ошибка создания тренировочного плана: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetTrainingPlans(coachId int) (api.TrainingPlanListResponse, error) {
+	query := `
+		SELECT
+			tp.plan_id,
+			tp.title,
+			t.team_name,
+			tp.start_date,
+			tp.end_date,
+			tp.status,
+			tp.description
+		FROM trainingplan tp
+		JOIN teams t ON t.team_id = tp.team_id
+		WHERE tp.created_by = $1`
+
+	rows, err := s.db.Query(query, coachId)
+	if err != nil {
+		return api.TrainingPlanListResponse{}, fmt.Errorf("ошибка получения тренировочных планов: %v", err)
+	}
+	defer rows.Close()
+
+	var plans []api.TrainingPlan
+	for rows.Next() {
+		var plan api.TrainingPlan
+		if err := rows.Scan(
+			&plan.PlanId,
+			&plan.Title,
+			&plan.TeamName,
+			&plan.StartDate,
+			&plan.EndDate,
+			&plan.Status,
+			&plan.Description,
+		); err != nil {
+			return api.TrainingPlanListResponse{}, fmt.Errorf("ошибка сканирования тренировочного плана: %v", err)
+		}
+		plans = append(plans, plan)
+	}
+
+	return api.TrainingPlanListResponse{Plans: plans}, nil
 }

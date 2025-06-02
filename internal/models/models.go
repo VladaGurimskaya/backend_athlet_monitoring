@@ -81,3 +81,8 @@ type DetailsInvite struct {
 	LicenseNumber  string
 	OrganizationID int
 }
+
+type Team struct {
+	TeamID   int
+	TeamName string
+}
