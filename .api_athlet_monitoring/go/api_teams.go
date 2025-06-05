@@ -61,6 +61,11 @@ func (c *TeamsAPIController) Routes() Routes {
 			"/api/v1/team/athlete-team-status",
 			c.TeamAthleteTeamStatusGet,
 		},
+		"TeamGetCriticalAthletesGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/team/get-critical-athletes",
+			c.TeamGetCriticalAthletesGet,
+		},
 		"TeamsAllAthletesGet": Route{
 			strings.ToUpper("Get"),
 			"/api/v1/teams/all-athletes",
@@ -86,6 +91,16 @@ func (c *TeamsAPIController) Routes() Routes {
 			"/api/v1/teams",
 			c.TeamsGet,
 		},
+		"TeamsGetCriticalAthletePost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/teams/get-critical-athlete",
+			c.TeamsGetCriticalAthletePost,
+		},
+		"TeamsGetMedicalAssigmentsGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams/get-medical-assigments",
+			c.TeamsGetMedicalAssigmentsGet,
+		},
 		"TeamsJoinPost": Route{
 			strings.ToUpper("Post"),
 			"/api/v1/teams/join",
@@ -110,6 +125,16 @@ func (c *TeamsAPIController) Routes() Routes {
 			strings.ToUpper("Get"),
 			"/api/v1/teams/joins-list/{team_id}",
 			c.TeamsJoinsListTeamIdGet,
+		},
+		"TeamsMedicalstaffGet": Route{
+			strings.ToUpper("Get"),
+			"/api/v1/teams/medicalstaff",
+			c.TeamsMedicalstaffGet,
+		},
+		"TeamsReferAthleteToMedicalstaffPost": Route{
+			strings.ToUpper("Post"),
+			"/api/v1/teams/refer-athlete-to-medicalstaff",
+			c.TeamsReferAthleteToMedicalstaffPost,
 		},
 	}
 }
@@ -144,6 +169,18 @@ func (c *TeamsAPIController) TeamAthleteRemovePost(w http.ResponseWriter, r *htt
 // TeamAthleteTeamStatusGet - Заявка на вступление в команду
 func (c *TeamsAPIController) TeamAthleteTeamStatusGet(w http.ResponseWriter, r *http.Request) {
 	result, err := c.service.TeamAthleteTeamStatusGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamGetCriticalAthletesGet - Список критических спортсменов
+func (c *TeamsAPIController) TeamGetCriticalAthletesGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamGetCriticalAthletesGet(r.Context())
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)
@@ -258,6 +295,45 @@ func (c *TeamsAPIController) TeamsGet(w http.ResponseWriter, r *http.Request) {
 	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
 }
 
+// TeamsGetCriticalAthletePost - Список критических спортсменов в команде
+func (c *TeamsAPIController) TeamsGetCriticalAthletePost(w http.ResponseWriter, r *http.Request) {
+	criticalAthleteRequestParam := CriticalAthleteRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&criticalAthleteRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertCriticalAthleteRequestRequired(criticalAthleteRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertCriticalAthleteRequestConstraints(criticalAthleteRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamsGetCriticalAthletePost(r.Context(), criticalAthleteRequestParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsGetMedicalAssigmentsGet - Список медицинских назначений
+func (c *TeamsAPIController) TeamsGetMedicalAssigmentsGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamsGetMedicalAssigmentsGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
 // TeamsJoinPost - Запрос спортсмена на вступление в команду
 func (c *TeamsAPIController) TeamsJoinPost(w http.ResponseWriter, r *http.Request) {
 	teamJoinRequestParam := TeamJoinRequest{}
@@ -348,6 +424,45 @@ func (c *TeamsAPIController) TeamsJoinsListTeamIdGet(w http.ResponseWriter, r *h
 		return
 	}
 	result, err := c.service.TeamsJoinsListTeamIdGet(r.Context(), teamIdParam)
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsMedicalstaffGet - Список медицинского персонала в команде
+func (c *TeamsAPIController) TeamsMedicalstaffGet(w http.ResponseWriter, r *http.Request) {
+	result, err := c.service.TeamsMedicalstaffGet(r.Context())
+	// If an error occurred, encode the error with the status code
+	if err != nil {
+		c.errorHandler(w, r, err, &result)
+		return
+	}
+	// If no error, encode the body and the result code
+	_ = EncodeJSONResponse(result.Body, &result.Code, result.Headers, w)
+}
+
+// TeamsReferAthleteToMedicalstaffPost - Направление спортсмена к медицинскому персоналу
+func (c *TeamsAPIController) TeamsReferAthleteToMedicalstaffPost(w http.ResponseWriter, r *http.Request) {
+	referAthletesToMedicalstaffRequestParam := ReferAthletesToMedicalstaffRequest{}
+	d := json.NewDecoder(r.Body)
+	d.DisallowUnknownFields()
+	if err := d.Decode(&referAthletesToMedicalstaffRequestParam); err != nil {
+		c.errorHandler(w, r, &ParsingError{Err: err}, nil)
+		return
+	}
+	if err := AssertReferAthletesToMedicalstaffRequestRequired(referAthletesToMedicalstaffRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	if err := AssertReferAthletesToMedicalstaffRequestConstraints(referAthletesToMedicalstaffRequestParam); err != nil {
+		c.errorHandler(w, r, err, nil)
+		return
+	}
+	result, err := c.service.TeamsReferAthleteToMedicalstaffPost(r.Context(), referAthletesToMedicalstaffRequestParam)
 	// If an error occurred, encode the error with the status code
 	if err != nil {
 		c.errorHandler(w, r, err, &result)

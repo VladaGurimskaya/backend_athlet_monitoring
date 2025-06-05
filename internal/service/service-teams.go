@@ -178,6 +178,182 @@ func (s *ServiceTeams) TeamsAllAthletesGet(ctx context.Context) (api.ImplRespons
 	}, nil
 }
 
+func (s *ServiceTeams) TeamGetCriticalAthletesGet(ctx context.Context) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для получения списка спортсменов")
+	}
+
+	criticalAthletes, err := s.storage.GetCriticalAthletes(accessClaims.UserID)
+	if err != nil {
+		log.Println("ошибка получения участников команды: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения участников команды: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: criticalAthletes,
+	}, nil
+}
+
+func (s *ServiceTeams) TeamsGetCriticalAthletePost(ctx context.Context, request api.CriticalAthleteRequest) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "medical" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для получения списка спортсменов")
+	}
+
+	criticalAthlete, err := s.storage.GetCriticalAthlete(int(request.AthleteId))
+	if err != nil {
+		log.Println("ошибка получения участников команды: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения участников команды: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: criticalAthlete,
+	}, nil
+}
+
+func (s *ServiceTeams) TeamsReferAthleteToMedicalstaffPost(ctx context.Context, request api.ReferAthletesToMedicalstaffRequest) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для получения списка спортсменов")
+	}
+
+	for _, athlete := range request.Athletes {
+		err = s.storage.ReferAthleteToMedicalstaff(int(athlete.AthleteId), int(athlete.MedicalstaffId), accessClaims.UserID)
+		if err != nil {
+			log.Println("ошибка получения участников команды: ", err)
+			return api.ImplResponse{
+				Code: 500,
+			}, fmt.Errorf("ошибка получения участников команды: %v", err)
+		}
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+	}, nil
+}
+
+func (s *ServiceTeams) TeamsMedicalstaffGet(ctx context.Context) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "coach" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для создания команды")
+	}
+
+	medicalstaff, err := s.storage.GetMedicalstaff()
+	if err != nil {
+		log.Println("ошибка получения участников команды: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения участников команды: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: medicalstaff,
+	}, nil
+}
+
+func (s *ServiceTeams) TeamsGetMedicalAssigmentsGet(ctx context.Context) (api.ImplResponse, error) {
+	httpReq, err := utils.ExtractHTTPRequest(ctx)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка извлечения HTTP-запроса: %v", err)
+	}
+
+	accessClaims, err := utils.VerifyAccessToken(httpReq)
+	if err != nil {
+		return api.ImplResponse{
+			Code: 401,
+		}, fmt.Errorf("ошибка проверки JWT токена: %v", err)
+	}
+
+	if accessClaims.Role != "medical" {
+		return api.ImplResponse{
+			Code: 403,
+		}, fmt.Errorf("недостаточно прав для просмотра осмотров")
+	}
+
+	medicalAssigments, err := s.storage.GetMedicalAssigments(accessClaims.UserID)
+	if err != nil {
+		log.Println("ошибка получения участников команды: ", err)
+		return api.ImplResponse{
+			Code: 500,
+		}, fmt.Errorf("ошибка получения участников команды: %v", err)
+	}
+
+	return api.ImplResponse{
+		Code: 200,
+		Body: medicalAssigments,
+	}, nil
+}
+
 func (s *ServiceTeams) TeamAthleteTeamStatusGet(ctx context.Context) (api.ImplResponse, error) {
 	httpReq, err := utils.ExtractHTTPRequest(ctx)
 	if err != nil {

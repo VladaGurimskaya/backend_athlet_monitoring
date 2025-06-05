@@ -44,16 +44,21 @@ type BiometricsAPIRouter interface {
 type TeamsAPIRouter interface {
 	TeamAthleteRemovePost(http.ResponseWriter, *http.Request)
 	TeamAthleteTeamStatusGet(http.ResponseWriter, *http.Request)
+	TeamGetCriticalAthletesGet(http.ResponseWriter, *http.Request)
 	TeamsAllAthletesGet(http.ResponseWriter, *http.Request)
 	TeamsAthletesPost(http.ResponseWriter, *http.Request)
 	TeamsCoachesPost(http.ResponseWriter, *http.Request)
 	TeamsCreatePost(http.ResponseWriter, *http.Request)
 	TeamsGet(http.ResponseWriter, *http.Request)
+	TeamsGetCriticalAthletePost(http.ResponseWriter, *http.Request)
+	TeamsGetMedicalAssigmentsGet(http.ResponseWriter, *http.Request)
 	TeamsJoinPost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdApprovePost(http.ResponseWriter, *http.Request)
 	TeamsJoinRequestIdRejectPost(http.ResponseWriter, *http.Request)
 	TeamsJoinsListGet(http.ResponseWriter, *http.Request)
 	TeamsJoinsListTeamIdGet(http.ResponseWriter, *http.Request)
+	TeamsMedicalstaffGet(http.ResponseWriter, *http.Request)
+	TeamsReferAthleteToMedicalstaffPost(http.ResponseWriter, *http.Request)
 }
 
 // TrainingAPIRouter defines the required methods for binding the api requests to a responses for the TrainingAPI
@@ -100,16 +105,21 @@ type BiometricsAPIServicer interface {
 type TeamsAPIServicer interface {
 	TeamAthleteRemovePost(context.Context, AthleteProfileRequest) (ImplResponse, error)
 	TeamAthleteTeamStatusGet(context.Context) (ImplResponse, error)
+	TeamGetCriticalAthletesGet(context.Context) (ImplResponse, error)
 	TeamsAllAthletesGet(context.Context) (ImplResponse, error)
 	TeamsAthletesPost(context.Context, TeamRequest) (ImplResponse, error)
 	TeamsCoachesPost(context.Context, TeamRequest) (ImplResponse, error)
 	TeamsCreatePost(context.Context, TeamCreateRequest) (ImplResponse, error)
 	TeamsGet(context.Context) (ImplResponse, error)
+	TeamsGetCriticalAthletePost(context.Context, CriticalAthleteRequest) (ImplResponse, error)
+	TeamsGetMedicalAssigmentsGet(context.Context) (ImplResponse, error)
 	TeamsJoinPost(context.Context, TeamJoinRequest) (ImplResponse, error)
 	TeamsJoinRequestIdApprovePost(context.Context, int32) (ImplResponse, error)
 	TeamsJoinRequestIdRejectPost(context.Context, int32) (ImplResponse, error)
 	TeamsJoinsListGet(context.Context) (ImplResponse, error)
 	TeamsJoinsListTeamIdGet(context.Context, int32) (ImplResponse, error)
+	TeamsMedicalstaffGet(context.Context) (ImplResponse, error)
+	TeamsReferAthleteToMedicalstaffPost(context.Context, ReferAthletesToMedicalstaffRequest) (ImplResponse, error)
 }
 
 // TrainingAPIServicer defines the api actions for the TrainingAPI service

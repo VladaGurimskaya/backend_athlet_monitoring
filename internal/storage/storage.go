@@ -6,6 +6,7 @@ import (
 	"backend_athlet_monitoring/internal/models"
 	"backend_athlet_monitoring/internal/utils"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -897,4 +898,480 @@ func (s *Storage) GetTrainingPlans(coachId int) (api.TrainingPlanListResponse, e
 	}
 
 	return api.TrainingPlanListResponse{Plans: plans}, nil
+}
+
+func (s *Storage) GetCriticalAthletes(coachId int) (api.CriticalAthletesResponse, error) {
+	query := `
+		SELECT
+		  a.athlete_id,
+		  a.first_name,
+		  a.middle_name,
+		  a.last_name,
+		  t.team_name,
+		  pt.name AS period_type
+		FROM athletes a
+		JOIN teams t ON a.team_id = t.team_id
+		JOIN trainingplan tp ON a.team_id = tp.team_id
+		JOIN coachteamlink ctl ON ctl.coach_id = tp.created_by AND ctl.team_id = t.team_id
+		JOIN periodtypes pt ON pt.period_type_id = tp.period_type_id
+		WHERE ctl.coach_id = $1
+	`
+	rows, err := s.db.Query(query, coachId)
+	if err != nil {
+		return api.CriticalAthletesResponse{}, fmt.Errorf("ошибка получения критических атлетов: %v", err)
+	}
+	defer rows.Close()
+
+	var result []api.CriticalAthleteProfileResponse
+
+	for rows.Next() {
+		var athlete api.CriticalAthleteProfileResponse
+		if err := rows.Scan(
+			&athlete.AthleteId,
+			&athlete.FirstName,
+			&athlete.MiddleName,
+			&athlete.LastName,
+			&athlete.TeamName,
+			&athlete.PeriodType,
+		); err != nil {
+			return api.CriticalAthletesResponse{}, fmt.Errorf("ошибка сканирования критического атлета: %v", err)
+		}
+
+		// Подгружаем биометрию за последние 7 дней
+		bioQuery := `
+			SELECT
+				date,
+				hrv,
+				morning_pulse,
+				evening_pulse,
+				weight
+			FROM biometricdata
+			WHERE athlete_id = $1
+			  AND date >= CURRENT_DATE - INTERVAL '6 day'
+			ORDER BY date DESC
+		`
+		bioRows, err := s.db.Query(bioQuery, athlete.AthleteId)
+		if err != nil {
+			return api.CriticalAthletesResponse{}, fmt.Errorf("ошибка получения биометрии: %v", err)
+		}
+
+		var indicators []api.AthleteIndicatorResponse
+		for bioRows.Next() {
+			var indicator api.AthleteIndicatorResponse
+			if err := bioRows.Scan(
+				&indicator.Date,
+				&indicator.Hrv,
+				&indicator.MorningPulse,
+				&indicator.EveningPulse,
+				&indicator.Weight,
+			); err != nil {
+				bioRows.Close()
+				return api.CriticalAthletesResponse{}, fmt.Errorf("ошибка сканирования биометрии: %v", err)
+			}
+			indicators = append(indicators, indicator)
+		}
+		bioRows.Close()
+		if len(indicators) == 0 {
+			continue // Нет данных — пропускаем
+		}
+
+		// baseline (скользящее среднее за 7 дней)
+		var sumHRV, sumPulse, sumWeight float64
+		var baseHRV, basePulse, baseWeight float64
+		var cntHRV, cntPulse, cntWeight int
+		for _, ind := range indicators {
+			if ind.Hrv > 0 {
+				sumHRV += float64(ind.Hrv)
+				cntHRV++
+			}
+			if ind.MorningPulse > 0 {
+				sumPulse += float64(ind.MorningPulse)
+				cntPulse++
+			}
+			if ind.Weight > 0 {
+				sumWeight += float64(ind.Weight)
+				cntWeight++
+			}
+		}
+		if cntHRV > 0 {
+			baseHRV = sumHRV / float64(cntHRV)
+		}
+		if cntPulse > 0 {
+			basePulse = sumPulse / float64(cntPulse)
+		}
+		if cntWeight > 0 {
+			baseWeight = sumWeight / float64(cntWeight)
+		}
+
+		// Берём последний день (он первый в indicators, так как ORDER BY DESC)
+		today := indicators[0]
+
+		// Определяем коэффициенты для периода
+		sensitivityCoefHRV := getSensitivityCoefHRV(athlete.PeriodType)
+		sensitivityCoefPulse := getSensitivityCoefPulse(athlete.PeriodType)
+		sensitivityCoefWeight := getSensitivityCoefWeight(athlete.PeriodType)
+		sensitivityCoefCombo1 := getSensitivityCoefCombo1(athlete.PeriodType)
+		sensitivityCoefCombo2 := getSensitivityCoefCombo2(athlete.PeriodType)
+		sensitivityCoefCombo3 := getSensitivityCoefCombo3(athlete.PeriodType)
+
+		// Считаем дельты
+		var (
+			deltaHRV    float64
+			deltaPulse  float64
+			deltaWeight float64
+		)
+		if baseHRV > 0 {
+			deltaHRV = (baseHRV - float64(today.Hrv)) / baseHRV * 100
+		}
+		if basePulse > 0 {
+			deltaPulse = (float64(today.MorningPulse) - basePulse) / basePulse * 100
+		}
+		if baseWeight > 0 {
+			deltaWeight = float64((baseWeight - float64(today.Weight)) / baseWeight * 100)
+		}
+
+		// Триггеры одиночные
+		triggerHRV := deltaHRV >= (15.0 * sensitivityCoefHRV)
+		triggerPulseAlert := deltaPulse >= (15.0 * sensitivityCoefPulse)
+		triggerEveningPulse := today.EveningPulse-today.MorningPulse >= 10
+		triggerWeight := deltaWeight >= (2.0 * sensitivityCoefWeight)
+
+		// Комбо-триггеры
+		triggerCombo1 := deltaHRV >= (15.0*sensitivityCoefCombo1) && deltaPulse >= (10.0*sensitivityCoefCombo1)   // HRV↓ + Pulse↑
+		triggerCombo2 := deltaHRV >= (15.0*sensitivityCoefCombo2) && deltaWeight >= (2.0*sensitivityCoefCombo2)   // HRV↓ + Вес↓
+		triggerCombo3 := deltaPulse >= (10.0*sensitivityCoefCombo3) && deltaWeight >= (2.0*sensitivityCoefCombo3) // Pulse↑ + Вес↓
+
+		isCritical :=
+			triggerHRV ||
+				triggerPulseAlert ||
+				triggerEveningPulse ||
+				triggerWeight ||
+				triggerCombo1 ||
+				triggerCombo2 ||
+				triggerCombo3
+
+		limits := map[string]api.IndicatorLimit{
+			"hrv": {
+				Min: float32(math.Round(baseHRV*(1-0.15*sensitivityCoefHRV)*10) / 10),
+				Max: float32(math.Round(baseHRV*(1+0.15*sensitivityCoefHRV)*10) / 10),
+			},
+			"morning_pulse": {
+				Min: float32(math.Round(basePulse*(1-0.15*sensitivityCoefPulse)*10) / 10),
+				Max: float32(math.Round(basePulse*(1+0.15*sensitivityCoefPulse)*10) / 10),
+			},
+			"evening_pulse": {
+				Min: float32(math.Round(basePulse*10) / 10),
+				Max: float32(math.Round((basePulse+10)*10) / 10),
+			},
+			"weight": {
+				Min: float32(math.Round(baseWeight*(1-0.02*sensitivityCoefWeight)*10) / 10),
+				Max: float32(math.Round(baseWeight*(1+0.02*sensitivityCoefWeight)*10) / 10),
+			},
+		}
+		athlete.Limits = limits
+
+		// Если критично — добавляем
+		if isCritical {
+			athlete.Indicators = indicators
+			athlete.Limits = limits
+			result = append(result, athlete)
+		}
+	}
+
+	return api.CriticalAthletesResponse{Athletes: result}, nil
+}
+
+// Индивидуальные sensitivityCoef для разных показателей и комбо
+func getSensitivityCoefHRV(period string) float64 {
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.2
+	case "Соревновательный":
+		return 1.0
+	case "Предсезонка", "сбор", "базовая подготовка":
+		return 0.8
+	case "Болезнь/травма":
+		return 1.3
+	default:
+		return 1.0
+	}
+}
+func getSensitivityCoefPulse(period string) float64 {
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.3
+	case "Соревновательный":
+		return 0.9
+	case "Тренировочный цикл":
+		return 1.0
+	case "Болезнь/травма":
+		return 1.4
+	default:
+		return 1.0
+	}
+}
+func getSensitivityCoefWeight(period string) float64 {
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.2
+	case "Соревновательный":
+		return 0.8
+	case "Болезнь/травма":
+		return 1.5
+	default:
+		return 1.0
+	}
+}
+func getSensitivityCoefCombo1(period string) float64 {
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.4
+	case "Соревновательный":
+		return 1.0
+	case "Предсезонка", "сбор", "базовая подготовка":
+		return 1.2
+	case "Болезнь/травма":
+		return 1.6
+	default:
+		return 1.0
+	}
+}
+func getSensitivityCoefCombo2(period string) float64 {
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.3
+	case "Соревновательный":
+		return 1.0
+	case "Предсезонка", "сбор", "базовая подготовка":
+		return 1.2
+	case "Болезнь/травма":
+		return 1.5
+	default:
+		return 1.0
+	}
+}
+func getSensitivityCoefCombo3(period string) float64 {
+	// В формулировке не было точных коэффициентов, используем такие же, как для Pulse и Weight или свои
+	switch period {
+	case "Восстановительный", "отпуск", "учеба":
+		return 1.2
+	case "Соревновательный":
+		return 1.0
+	case "Болезнь/травма":
+		return 1.5
+	default:
+		return 1.0
+	}
+}
+
+func (s *Storage) ReferAthleteToMedicalstaff(athleteId, medicalStaffId, coachId int) error {
+	query := "INSERT INTO medicalassignments (athlete_id, assigned_by, medical_staff_id) VALUES ($1, $2, $3)"
+
+	_, err := s.db.Exec(query, athleteId, coachId, medicalStaffId)
+	if err != nil {
+		return fmt.Errorf("ошибка при назначении атлета на врача: %v", err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetMedicalstaff() (api.TeamGetMedicalstaffResponse, error) {
+	query := "SELECT medical_staff_id, first_name, middle_name, last_name, specialization FROM medicalstaff"
+
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return api.TeamGetMedicalstaffResponse{}, fmt.Errorf("ошибка при получении списка врачей: %v", err)
+	}
+	defer rows.Close()
+
+	var medicalstaff []api.MedicalstaffProfileResponse
+	for rows.Next() {
+		var ms api.MedicalstaffProfileResponse
+		if err := rows.Scan(&ms.MedicalstaffId, &ms.FirstName, &ms.MiddleName, &ms.LastName, &ms.Specialization); err != nil {
+			return api.TeamGetMedicalstaffResponse{}, fmt.Errorf("ошибка при чтении данных врача: %v", err)
+		}
+		medicalstaff = append(medicalstaff, ms)
+	}
+
+	return api.TeamGetMedicalstaffResponse{Medicalstaff: medicalstaff}, nil
+}
+
+func (s *Storage) GetMedicalAssigments(medicalId int) (api.TeamGetMedicalAssignmentsResponse, error) {
+	query := `
+		SELECT
+			ma.athlete_id,
+			ma.assigned_by,
+			a.date_of_birth,
+			st.name,
+			ma.status
+		FROM
+			medicalassignments ma
+		JOIN athletes a ON ma.athlete_id = a.athlete_id
+		JOIN sporttypes st ON a.sport_type_id = st.sport_type_id
+		WHERE
+			ma.medical_staff_id = $1
+	`
+
+	rows, err := s.db.Query(query, medicalId)
+	if err != nil {
+		return api.TeamGetMedicalAssignmentsResponse{}, fmt.Errorf("ошибка при получении списка атлетов: %v", err)
+	}
+	defer rows.Close()
+
+	var athletes []api.MedicalAssigment
+	for rows.Next() {
+		var a api.MedicalAssigment
+		var dob string
+		if err := rows.Scan(&a.AthleteId, &a.AssignedBy, &dob, &a.SportType, &a.Status); err != nil {
+			return api.TeamGetMedicalAssignmentsResponse{}, fmt.Errorf("ошибка при чтении данных атлета: %v", err)
+		}
+		a.Age = int32(utils.CalcAge(dob))
+		a.AthleteCode = utils.RandomAnonCode()
+		athletes = append(athletes, a)
+	}
+
+	return api.TeamGetMedicalAssignmentsResponse{Athletes: athletes}, nil
+}
+
+func (s *Storage) GetCriticalAthlete(athleteId int) (api.CriticalAthleteResponse, error) {
+	bioQuery := `
+		SELECT
+			pt.name AS period_type,
+			bd.date,
+			bd.hrv,
+			bd.morning_pulse,
+			bd.evening_pulse,
+			bd.weight
+		FROM biometricdata bd
+		JOIN athletes a ON bd.athlete_id = a.athlete_id
+		JOIN teams t ON a.team_id = t.team_id
+		JOIN trainingplan tp ON t.team_id = tp.team_id
+		JOIN periodtypes pt ON pt.period_type_id = tp.period_type_id
+		WHERE bd.athlete_id = $1
+			AND bd.date >= CURRENT_DATE - INTERVAL '6 day'
+		ORDER BY bd.date DESC
+	`
+	bioRows, err := s.db.Query(bioQuery, athleteId)
+	if err != nil {
+		return api.CriticalAthleteResponse{}, fmt.Errorf("ошибка получения биометрии: %v", err)
+	}
+	defer bioRows.Close()
+
+	var (
+		periodType string
+		indicators []api.AthleteIndicatorResponse
+	)
+	for bioRows.Next() {
+		var indicator api.AthleteIndicatorResponse
+		// Сначала получаем период, затем показатели
+		if err := bioRows.Scan(
+			&periodType,
+			&indicator.Date,
+			&indicator.Hrv,
+			&indicator.MorningPulse,
+			&indicator.EveningPulse,
+			&indicator.Weight,
+		); err != nil {
+			return api.CriticalAthleteResponse{}, fmt.Errorf("ошибка сканирования биометрии: %v", err)
+		}
+		indicators = append(indicators, indicator)
+	}
+	if len(indicators) == 0 {
+		return api.CriticalAthleteResponse{}, nil // Нет данных
+	}
+
+	// baseline (скользящее среднее за 7 дней)
+	var sumHRV, sumPulse, sumWeight float64
+	var baseHRV, basePulse, baseWeight float64
+	var cntHRV, cntPulse, cntWeight int
+	for _, ind := range indicators {
+		if ind.Hrv > 0 {
+			sumHRV += float64(ind.Hrv)
+			cntHRV++
+		}
+		if ind.MorningPulse > 0 {
+			sumPulse += float64(ind.MorningPulse)
+			cntPulse++
+		}
+		if ind.Weight > 0 {
+			sumWeight += float64(ind.Weight)
+			cntWeight++
+		}
+	}
+	if cntHRV > 0 {
+		baseHRV = sumHRV / float64(cntHRV)
+	}
+	if cntPulse > 0 {
+		basePulse = sumPulse / float64(cntPulse)
+	}
+	if cntWeight > 0 {
+		baseWeight = sumWeight / float64(cntWeight)
+	}
+
+	// Берём последний день (он первый в indicators, так как ORDER BY DESC)
+	today := indicators[0]
+
+	// Определяем коэффициенты для периода
+	sensitivityCoefHRV := getSensitivityCoefHRV(periodType)
+	sensitivityCoefPulse := getSensitivityCoefPulse(periodType)
+	sensitivityCoefWeight := getSensitivityCoefWeight(periodType)
+	sensitivityCoefCombo1 := getSensitivityCoefCombo1(periodType)
+	sensitivityCoefCombo2 := getSensitivityCoefCombo2(periodType)
+	sensitivityCoefCombo3 := getSensitivityCoefCombo3(periodType)
+
+	// Считаем дельты
+	var (
+		deltaHRV    float64
+		deltaPulse  float64
+		deltaWeight float64
+	)
+	if baseHRV > 0 {
+		deltaHRV = (baseHRV - float64(today.Hrv)) / baseHRV * 100
+	}
+	if basePulse > 0 {
+		deltaPulse = (float64(today.MorningPulse) - basePulse) / basePulse * 100
+	}
+	if baseWeight > 0 {
+		deltaWeight = (baseWeight - float64(today.Weight)) / baseWeight * 100
+	}
+
+	// Триггеры одиночные
+	triggerHRV := deltaHRV >= (15.0 * sensitivityCoefHRV)
+	triggerPulseAlert := deltaPulse >= (15.0 * sensitivityCoefPulse)
+	triggerEveningPulse := today.EveningPulse-today.MorningPulse >= 10
+	triggerWeight := deltaWeight >= (2.0 * sensitivityCoefWeight)
+
+	// Комбо-триггеры
+	triggerCombo1 := deltaHRV >= (15.0*sensitivityCoefCombo1) && deltaPulse >= (10.0*sensitivityCoefCombo1)
+	triggerCombo2 := deltaHRV >= (15.0*sensitivityCoefCombo2) && deltaWeight >= (2.0*sensitivityCoefCombo2)
+	triggerCombo3 := deltaPulse >= (10.0*sensitivityCoefCombo3) && deltaWeight >= (2.0*sensitivityCoefCombo3)
+
+	_ = triggerHRV || triggerPulseAlert || triggerEveningPulse ||
+		triggerWeight || triggerCombo1 || triggerCombo2 || triggerCombo3
+
+	limits := map[string]api.IndicatorLimit{
+		"hrv": {
+			Min: float32(math.Round(baseHRV*(1-0.15*sensitivityCoefHRV)*10) / 10),
+			Max: float32(math.Round(baseHRV*(1+0.15*sensitivityCoefHRV)*10) / 10),
+		},
+		"morning_pulse": {
+			Min: float32(math.Round(basePulse*(1-0.15*sensitivityCoefPulse)*10) / 10),
+			Max: float32(math.Round(basePulse*(1+0.15*sensitivityCoefPulse)*10) / 10),
+		},
+		"evening_pulse": {
+			Min: float32(math.Round(basePulse*10) / 10),
+			Max: float32(math.Round((basePulse+10)*10) / 10),
+		},
+		"weight": {
+			Min: float32(math.Round(baseWeight*(1-0.02*sensitivityCoefWeight)*10) / 10),
+			Max: float32(math.Round(baseWeight*(1+0.02*sensitivityCoefWeight)*10) / 10),
+		},
+	}
+
+	// Можно вернуть только если критично, либо всегда (тогда просто не пиши isCritical проверку)
+	return api.CriticalAthleteResponse{
+		Indicators: indicators,
+		Limits:     limits,
+		PeriodType: periodType,
+	}, nil
 }
